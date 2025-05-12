@@ -6,8 +6,15 @@ import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { vapi } from "@/lib/vapi.sdk";
-// import { interviewer } from "@/constants";
-// import { createFeedback } from "@/lib/actions/general.action";
+import { createFeedback } from "@/lib/actions/general.action";
+import { interviewer } from "@/constants";
+
+type Message = {
+  type: string;
+  transcriptType?: string;
+  role: "user" | "system" | "assistant";
+  transcript?: string;
+};
 
 enum CallStatus {
   INACTIVE = "INACTIVE",
@@ -19,6 +26,15 @@ enum CallStatus {
 interface SavedMessage {
   role: "user" | "system" | "assistant";
   content: string;
+}
+
+interface AgentProps {
+  userName: string;
+  userId: string;
+  interviewId?: string;
+  feedbackId?: string;
+  type: string;
+  questions?: string[] | null;
 }
 
 const Agent = ({
@@ -46,7 +62,7 @@ const Agent = ({
 
     const onMessage = (message: Message) => {
       if (message.type === "transcript" && message.transcriptType === "final") {
-        const newMessage = { role: message.role, content: message.transcript };
+        const newMessage = { role: message.role, content: message.transcript ?? "" };
         setMessages((prev) => [...prev, newMessage]);
       }
     };
@@ -123,12 +139,14 @@ const Agent = ({
           username: userName,
           userid: userId,
         },
+        clientMessages: [],
+        serverMessages: [],
       });
     } else {
       let formattedQuestions = "";
       if (questions) {
-        formattedQuestions = questions
-          .map((question) => `- ${question}`)
+        formattedQuestions = (questions as string[])
+          .map((question: string) => `- ${question}`)
           .join("\n");
       }
 
@@ -136,6 +154,8 @@ const Agent = ({
         variableValues: {
           questions: formattedQuestions,
         },
+        clientMessages: [],
+        serverMessages: [],
       });
     }
   };

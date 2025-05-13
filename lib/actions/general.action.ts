@@ -6,13 +6,6 @@ import { google } from "@ai-sdk/google";
 import { db } from "@/firebase/admin";
 import { feedbackSchema } from "@/constants";
 
-type CreateFeedbackParams = {
-  interviewId: string;
-  userId: string;
-  transcript: { role: string; content: string }[];
-  feedbackId?: string;
-};
-
 export async function createFeedback(params: CreateFeedbackParams) {
   const { interviewId, userId, transcript, feedbackId } = params;
 
@@ -73,35 +66,11 @@ export async function createFeedback(params: CreateFeedbackParams) {
   }
 }
 
-type Interview = {
-  id?: string;
-  userId: string;
-  createdAt: string;
-  finalized: boolean;
-};
-
 export async function getInterviewById(id: string): Promise<Interview | null> {
   const interview = await db.collection("interviews").doc(id).get();
 
   return interview.data() as Interview | null;
 }
-
-type GetFeedbackByInterviewIdParams = {
-  interviewId: string;
-  userId: string;
-};
-
-type Feedback = {
-  id?: string;
-  interviewId: string;
-  userId: string;
-  totalScore: number;
-  categoryScores: Record<string, number>;
-  strengths: string[];
-  areasForImprovement: string[];
-  finalAssessment: string;
-  createdAt: string;
-};
 
 export async function getFeedbackByInterviewId(
   params: GetFeedbackByInterviewIdParams
@@ -120,11 +89,6 @@ export async function getFeedbackByInterviewId(
   const feedbackDoc = querySnapshot.docs[0];
   return { id: feedbackDoc.id, ...feedbackDoc.data() } as Feedback;
 }
-
-type GetLatestInterviewsParams = {
-  userId: string;
-  limit?: number;
-};
 
 export async function getLatestInterviews(
   params: GetLatestInterviewsParams

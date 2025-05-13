@@ -153,8 +153,6 @@ End the conversation on a polite and positive note.
       },
     ],
   },
-  clientMessages: [],
-  serverMessages: [],
 };
 
 export const feedbackSchema = z.object({
@@ -205,18 +203,6 @@ export const interviewCovers = [
   "/tiktok.png",
   "/yahoo.png",
 ];
-
-type Interview = {
-  id: string;
-  userId: string;
-  role: string;
-  type: string;
-  techstack: string[];
-  level: string;
-  questions: string[];
-  finalized: boolean;
-  createdAt: string;
-};
 
 export const dummyInterviews: Interview[] = [
   {

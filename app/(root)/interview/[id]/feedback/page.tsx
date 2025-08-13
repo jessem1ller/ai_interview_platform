@@ -20,7 +20,7 @@ type CategoryScore = {
 };
 
 const Feedback = async ({ params }: RouteParams) => {
-  const { id } = await params;
+  const { id } = params;
   const user = await getCurrentUser();
 
   const interview = await getInterviewById(id);
@@ -34,6 +34,8 @@ const Feedback = async ({ params }: RouteParams) => {
     interviewId: id,
     userId: user.id,
   });
+
+  console.log("Fetched feedback:", feedback);
 
   return (
     <section className="section-feedback">

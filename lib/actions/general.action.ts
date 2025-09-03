@@ -1,10 +1,14 @@
 "use server";
 
 import { generateObject } from "ai";
-import { google } from "@ai-sdk/google";
-
+// import { google } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { db } from "@/firebase/admin";
 import { feedbackSchema } from "@/constants";
+
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.NEXT_GOOGLE_GENERATIVE_AI_API_KEY,
+});
 
 export async function createFeedback(params: CreateFeedbackParams) {
   const { interviewId, userId, transcript, feedbackId } = params;

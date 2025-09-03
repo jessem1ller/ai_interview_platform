@@ -1,5 +1,9 @@
 import { generateText } from "ai";
-import { google } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+
+const googleClient = createGoogleGenerativeAI({
+  apiKey: process.env.NEXT_GOOGLE_GENERATIVE_AI_API_KEY,
+});
 
 import { db } from "@/firebase/admin";
 import { getRandomInterviewCover } from "@/lib/utils";
@@ -13,9 +17,7 @@ export async function POST(request: Request) {
     const effectiveUserId = user?.id || userid;
 
     const { text: questions } = await generateText({
-      model: google("gemini-2.0-flash-001", {
-        apiKey: process.env.NEXT_GOOGLE_GENERATIVE_AI_API_KEY,
-      }),
+      model: googleClient("gemini-2.0-flash-001"),
       prompt: `Prepare questions for a job interview.
         The job role is ${role}.
         The job experience level is ${level}.

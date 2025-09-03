@@ -90,12 +90,6 @@ const Agent = ({
     const handleGenerateFeedback = async (messages: SavedMessage[]) => {
       console.log("handleGenerateFeedback");
 
-      if (messages.length === 0) {
-        console.error("No transcript available, cannot generate feedback.");
-        router.push("/"); // Or redirect to an error page
-        return; // Stop the function here
-      }
-
       const { success, feedbackId: id } = await createFeedback({
         interviewId: interviewId!,
         userId: userId!,

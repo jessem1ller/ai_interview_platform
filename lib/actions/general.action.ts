@@ -95,31 +95,33 @@ export async function getLatestInterviews(
 ): Promise<Interview[] | null> {
   const { userId, limit = 20 } = params;
 
-  const interviews = await db
+  const snap = await db
     .collection("interviews")
     .orderBy("createdAt", "desc")
-    .where("finalized", "==", true)
-    .where("userId", "!=", userId)
-    .limit(limit)
+    .limit(limit * 3)
     .get();
 
-  return interviews.docs.map((doc) => ({
+  const all = snap.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Interview[];
+
+  return all.filter((i) => i.finalized === true && i.userId !== userId).slice(0, limit);
 }
 
 export async function getInterviewsByUserId(
   userId: string
 ): Promise<Interview[] | null> {
-  const interviews = await db
+  const snap = await db
     .collection("interviews")
-    .where("userId", "==", userId)
     .orderBy("createdAt", "desc")
+    .limit(100)
     .get();
 
-  return interviews.docs.map((doc) => ({
+  const all = snap.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Interview[];
+
+  return all.filter((i) => i.userId === userId);
 }

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const effectiveUserId = user?.id || userid;
 
     const { text: questions } = await generateText({
-      model: googleClient("gemini-2.0-flash-001"),
+      model: googleClient("gemini-1.5-flash-latest"),
       prompt: `Prepare questions for a job interview.
         The job role is ${role}.
         The job experience level is ${level}.

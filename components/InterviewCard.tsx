@@ -8,14 +8,14 @@ import DisplayTechIcons from "./DisplayTechIcons";
 import { cn, getRandomInterviewCover } from "@/lib/utils";
 import { getFeedbackByInterviewId } from "@/lib/actions/general.action";
 
-type InterviewCardProps = {
-  interviewId?: string;
+interface InterviewCardProps {
+  interviewId: string;
   userId?: string;
   role: string;
   type: string;
   techstack: string[];
   createdAt?: string | number | Date;
-};
+}
 
 const InterviewCard = async ({
   interviewId,

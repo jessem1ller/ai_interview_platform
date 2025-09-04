@@ -1,14 +1,10 @@
 "use server";
 
 import { generateObject } from "ai";
-// import { google } from "@ai-sdk/google";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { google } from "@ai-sdk/google";
+
 import { db } from "@/firebase/admin";
 import { feedbackSchema } from "@/constants";
-
-const google = createGoogleGenerativeAI({
-  apiKey: process.env.NEXT_GOOGLE_GENERATIVE_AI_API_KEY,
-});
 
 export async function createFeedback(params: CreateFeedbackParams) {
   const { interviewId, userId, transcript, feedbackId } = params;
@@ -22,7 +18,7 @@ export async function createFeedback(params: CreateFeedbackParams) {
       .join("");
 
     const { object } = await generateObject({
-      model: google("gemini-1.5-flash-latest", {
+      model: google("gemini-2.0-flash-001", {
         structuredOutputs: false,
       }),
       schema: feedbackSchema,
@@ -36,7 +32,7 @@ export async function createFeedback(params: CreateFeedbackParams) {
         - **Technical Knowledge**: Understanding of key concepts for the role.
         - **Problem-Solving**: Ability to analyze problems and propose solutions.
         - **Cultural & Role Fit**: Alignment with company values and job role.
-        - **Confidence and Clarity**: Confidence in responses, engagement, and clarity.
+        - **Confidence & Clarity**: Confidence in responses, engagement, and clarity.
         `,
       system:
         "You are a professional interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories",
@@ -99,33 +95,31 @@ export async function getLatestInterviews(
 ): Promise<Interview[] | null> {
   const { userId, limit = 20 } = params;
 
-  const snap = await db
+  const interviews = await db
     .collection("interviews")
     .orderBy("createdAt", "desc")
-    .limit(limit * 3)
+    .where("finalized", "==", true)
+    .where("userId", "!=", userId)
+    .limit(limit)
     .get();
 
-  const all = snap.docs.map((doc) => ({
+  return interviews.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Interview[];
-
-  return all.filter((i) => i.finalized === true && i.userId !== userId).slice(0, limit);
 }
 
 export async function getInterviewsByUserId(
   userId: string
 ): Promise<Interview[] | null> {
-  const snap = await db
+  const interviews = await db
     .collection("interviews")
+    .where("userId", "==", userId)
     .orderBy("createdAt", "desc")
-    .limit(100)
     .get();
 
-  const all = snap.docs.map((doc) => ({
+  return interviews.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Interview[];
-
-  return all.filter((i) => i.userId === userId);
 }

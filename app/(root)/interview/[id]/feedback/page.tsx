@@ -10,32 +10,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 
-type RouteParams = { params: { id: string } };
-
-// Define CategoryScore type if not imported from elsewhere
-type CategoryScore = {
-  name: string;
-  score: number;
-  comment: string;
-};
-
 const Feedback = async ({ params }: RouteParams) => {
-  const { id } = params;
+  const { id } = await params;
   const user = await getCurrentUser();
 
   const interview = await getInterviewById(id);
   if (!interview) redirect("/");
 
-  if (!user?.id) {
-    redirect("/"); // or handle unauthorized access appropriately
-  }
-
   const feedback = await getFeedbackByInterviewId({
     interviewId: id,
-    userId: user.id,
+    userId: user?.id!,
   });
-
-  console.log("Fetched feedback:", feedback);
 
   return (
     <section className="section-feedback">
@@ -79,7 +64,7 @@ const Feedback = async ({ params }: RouteParams) => {
       {/* Interview Breakdown */}
       <div className="flex flex-col gap-4">
         <h2>Breakdown of the Interview:</h2>
-        {feedback?.categoryScores?.map((category: CategoryScore, index: number) => (
+        {feedback?.categoryScores?.map((category, index) => (
           <div key={index}>
             <p className="font-bold">
               {index + 1}. {category.name} ({category.score}/100)
@@ -92,18 +77,18 @@ const Feedback = async ({ params }: RouteParams) => {
       <div className="flex flex-col gap-3">
         <h3>Strengths</h3>
         <ul>
-            {feedback?.strengths?.map((strength: string, index: number) => (
+          {feedback?.strengths?.map((strength, index) => (
             <li key={index}>{strength}</li>
-            ))}
+          ))}
         </ul>
       </div>
 
       <div className="flex flex-col gap-3">
         <h3>Areas for Improvement</h3>
         <ul>
-            {feedback?.areasForImprovement?.map((area: string, index: number) => (
+          {feedback?.areasForImprovement?.map((area, index) => (
             <li key={index}>{area}</li>
-            ))}
+          ))}
         </ul>
       </div>
 

@@ -16,20 +16,13 @@ const InterviewDetails = async ({ params }: RouteParams) => {
 
   const user = await getCurrentUser();
 
-if (!user) {
-    redirect("/sign-in");
-  }
-
   const interview = await getInterviewById(id);
   if (!interview) redirect("/");
 
-  let feedback = null;
-  if (user?.id) {
-    feedback = await getFeedbackByInterviewId({
-      interviewId: id,
-      userId: user.id,
-    });
-  }
+  const feedback = await getFeedbackByInterviewId({
+    interviewId: id,
+    userId: user?.id!,
+  });
 
   return (
     <>
@@ -55,7 +48,7 @@ if (!user) {
       </div>
 
       <Agent
-        userName={user?.name ?? "Guest"}
+        userName={user?.name!}
         userId={user?.id}
         interviewId={id}
         type="interview"

@@ -61,8 +61,11 @@ const Agent = ({
       setIsSpeaking(false);
     };
 
-    const onError = (error: Error) => {
+    const onError = (error: any) => {
       console.log("Error:", error);
+      if (error?.errorMsg === 'Meeting has ended') {
+        setCallStatus(CallStatus.FINISHED);
+      }
     };
 
     vapi.on("call-start", onCallStart);
@@ -83,6 +86,10 @@ const Agent = ({
   }, []);
 
   useEffect(() => {
+    // --- Start of New Debug Code ---
+    console.log(`[EFFECT] Running. Status: ${callStatus}, Messages: ${messages.length}`);
+    // --- End of New Debug Code ---
+
     if (messages.length > 0) {
       setLastMessage(messages[messages.length - 1].content);
     }
@@ -106,6 +113,9 @@ const Agent = ({
     };
 
     if (callStatus === CallStatus.FINISHED) {
+      // --- Start of New Debug Code ---
+      console.log('[EFFECT] Status is FINISHED. Preparing to save feedback.');
+      // --- End of New Debug Code ---
       if (type === "generate") {
         router.push("/");
       } else {

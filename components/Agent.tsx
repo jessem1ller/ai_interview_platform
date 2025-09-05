@@ -19,12 +19,38 @@ interface SavedMessage {
   content: string;
 }
 
+const interviewTypes: string[] = ["technical", "behavioral", "mixed"];
+const requiredFields: string[] = ["role", "level", "techstack", "amount", "type"];
+
+const createInterviewTool = {
+  type: "function",
+  function: {
+    name: "createInterview",
+    description: "Creates a new mock interview based on user specifications.",
+    parameters: {
+      type: "object",
+      properties: {
+        role: { type: "string", description: "The job role, e.g., Senior Frontend Developer" },
+        level: { type: "string", description: "The job experience level, e.g., Senior, Junior" },
+        techstack: { type: "string", description: "Comma-separated list of technologies, e.g., React, TypeScript, Node.js" },
+        amount: { type: "string", description: "The number of questions, e.g., 5, 10" },
+        type: { type: "string", enum: interviewTypes, description: "The type of interview questions." },
+      },
+      required: requiredFields,
+    },
+  },
+} as const;
+
+
 const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: AgentProps) => {
   const router = useRouter();
   const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
+
+  // ✅ Define firstName here, at the top of the component
+  const firstName = userName?.split(' ')[0] || 'there';
 
   const handleMessage = useCallback(async (message: any) => {
     if (message.type === "transcript" && message.transcriptType === "final") {
@@ -111,55 +137,35 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
 
   const handleCall = async () => {
     setCallStatus(CallStatus.CONNECTING);
-
     if (type === "generate") {
       vapi.start({
-        firstMessage: "Hello! I can help you create a mock interview. To get started, what is the job role you're preparing for?",
+        firstMessage: `Hello ${firstName}! My name is Johnny Five and I can help you create a mock interview to get your dream job. What is the job role you're preparing for?`,
         model: {
           provider: "openai",
           model: "gpt-4o",
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "createInterview",
-                description: "Creates a new mock interview based on user specifications.",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    role: { type: "string", description: "The job role, e.g., Senior Frontend Developer" },
-                    level: { type: "string", description: "The job experience level, e.g., Senior, Junior" },
-                    techstack: { type: "string", description: "Comma-separated list of technologies, e.g., React, TypeScript, Node.js" },
-                    amount: { type: "string", description: "The number of questions, e.g., 5, 10" },
-                    type: { type: "string", enum: ["technical", "behavioral", "mixed"], description: "The type of interview questions." },
-                  },
-                  required: ["role", "level", "techstack", "amount", "type"],
-                },
-              },
-            },
-          ],
+          tools: [createInterviewTool],
           messages: [{
             role: 'system',
-            content: "You are an assistant that helps a user create a mock interview. Your primary goal is to collect all necessary information by asking questions one at a time. Once you have all the details, you MUST call the `createInterview` function. Do not end the conversation until the function has been successfully called."
+            content: `You are an assistant helping a user named ${firstName} create a mock interview. Your primary goal is to collect all necessary information by asking questions one at a time. Once you have all the details, you MUST call the \`createInterview\` function. Do not end the conversation until the function has been successfully called.`
           }]
         },
-        clientMessages: [],
-        serverMessages: [],
+        clientMessages: undefined,
+        serverMessages: undefined,
       });
     } else {
       const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
       vapi.start({
-        firstMessage: "Welcome to your mock interview. Let's begin with your first question.",
+        firstMessage: `Welcome to your mock interview, ${firstName}. Let's begin with your first question.`,
         model: {
           provider: "openai",
           model: "gpt-4o",
           messages: [{
             role: "system",
-            content: `You are an AI interviewer. Your role is to ask the user the following questions one by one. Do not deviate. The questions are:\n${formattedQuestions}`
+            content: `You are an AI interviewer conducting an interview with ${firstName}. Your role is to ask the user the following questions one by one. Do not deviate. The questions are:\n${formattedQuestions}`
           }]
         },
-        clientMessages: [],
-        serverMessages: [],
+        clientMessages: undefined,
+        serverMessages: undefined,
       });
     }
   };

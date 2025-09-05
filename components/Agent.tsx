@@ -3,10 +3,8 @@
 import Image from "next/image";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-
 import { cn } from "@/lib/utils";
 import { vapi } from "@/lib/vapi.sdk";
-import { interviewer } from "@/constants";
 import { createFeedback } from "@/lib/actions/general.action";
 
 enum CallStatus {
@@ -21,14 +19,27 @@ interface SavedMessage {
   content: string;
 }
 
-const Agent = ({
-  userName,
-  userId,
-  interviewId,
-  feedbackId,
-  type,
-  questions,
-}: AgentProps) => {
+const createInterviewTool = {
+  type: "function",
+  function: {
+    name: "createInterview",
+    description: "Creates a new mock interview based on user specifications.",
+    parameters: {
+      type: "object",
+      properties: {
+        role: { type: "string", description: "The job role, e.g., Senior Frontend Developer" },
+        level: { type: "string", description: "The job experience level, e.g., Senior, Junior" },
+        techstack: { type: "string", description: "Comma-separated list of technologies, e.g., React, TypeScript, Node.js" },
+        amount: { type: "string", description: "The number of questions, e.g., 5, 10" },
+        type: { type: "string", enum: ["technical", "behavioral", "mixed"] as string[], description: "The type of interview questions." },
+      },
+      required: ["role", "level", "techstack", "amount", "type"] as string[],
+    },
+  },
+} as const;
+
+
+const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: AgentProps) => {
   const router = useRouter();
   const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
   const [messages, setMessages] = useState<SavedMessage[]>([]);
@@ -36,31 +47,43 @@ const Agent = ({
   const [lastMessage, setLastMessage] = useState<string>("");
 
   useEffect(() => {
-    const onCallStart = () => {
-      setCallStatus(CallStatus.ACTIVE);
-    };
-
-    const onCallEnd = () => {
-      setCallStatus(CallStatus.FINISHED);
-    };
-
-    const onMessage = (message: Message) => {
+    const handleMessage = async (message: any) => {
       if (message.type === "transcript" && message.transcriptType === "final") {
         const newMessage = { role: message.role, content: message.transcript };
         setMessages((prev) => [...prev, newMessage]);
       }
+
+      if (
+        type === "generate" &&
+        message.type === "function-call" &&
+        message.functionCall?.name === "createInterview"
+      ) {
+        const interviewDetails = message.functionCall.parameters;
+        try {
+          const response = await fetch("/api/vapi/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...interviewDetails, userid: userId }),
+          });
+          const result = await response.json();
+          if (result.success && result.id) {
+            router.push(`/interview/${result.id}`);
+          } else {
+            console.error("Failed to create interview:", result.error);
+            router.push('/');
+          }
+        } catch (error) {
+          console.error("Error calling API:", error);
+        } finally {
+          vapi.stop();
+        }
+      }
     };
 
-    const onSpeechStart = () => {
-      console.log("speech start");
-      setIsSpeaking(true);
-    };
-
-    const onSpeechEnd = () => {
-      console.log("speech end");
-      setIsSpeaking(false);
-    };
-
+    const onCallStart = () => setCallStatus(CallStatus.ACTIVE);
+    const onCallEnd = () => setCallStatus(CallStatus.FINISHED);
+    const onSpeechStart = () => setIsSpeaking(true);
+    const onSpeechEnd = () => setIsSpeaking(false);
     const onError = (error: any) => {
       console.log("Error:", error);
       if (error?.errorMsg === 'Meeting has ended') {
@@ -68,42 +91,28 @@ const Agent = ({
       }
     };
 
+    vapi.on("message", handleMessage);
     vapi.on("call-start", onCallStart);
     vapi.on("call-end", onCallEnd);
-    vapi.on("message", onMessage);
     vapi.on("speech-start", onSpeechStart);
     vapi.on("speech-end", onSpeechEnd);
     vapi.on("error", onError);
 
     return () => {
+      vapi.off("message", handleMessage);
       vapi.off("call-start", onCallStart);
       vapi.off("call-end", onCallEnd);
-      vapi.off("message", onMessage);
       vapi.off("speech-start", onSpeechStart);
       vapi.off("speech-end", onSpeechEnd);
       vapi.off("error", onError);
     };
-  }, []);
+  }, [type, userId, router]);
 
   useEffect(() => {
-    // --- Start of New Debug Code ---
-    console.log(`[EFFECT] Running. Status: ${callStatus}, Messages: ${messages.length}`);
-    // --- End of New Debug Code ---
-
-    if (messages.length > 0) {
-      setLastMessage(messages[messages.length - 1].content);
-    }
-
-    const handleGenerateFeedback = async (messages: SavedMessage[]) => {
+    const handleGenerateFeedback = async (transcript: SavedMessage[]) => {
+      if (!transcript || transcript.length === 0) return;
       console.log("handleGenerateFeedback");
-
-      const { success, feedbackId: id } = await createFeedback({
-        interviewId: interviewId!,
-        userId: userId!,
-        transcript: messages,
-        feedbackId,
-      });
-
+      const { success, feedbackId: id } = await createFeedback({ interviewId: interviewId!, userId: userId!, transcript, feedbackId });
       if (success && id) {
         router.push(`/interview/${interviewId}/feedback`);
       } else {
@@ -112,41 +121,40 @@ const Agent = ({
       }
     };
 
-    if (callStatus === CallStatus.FINISHED) {
-      // --- Start of New Debug Code ---
-      console.log('[EFFECT] Status is FINISHED. Preparing to save feedback.');
-      // --- End of New Debug Code ---
-      if (type === "generate") {
-        router.push("/");
-      } else {
-        handleGenerateFeedback(messages);
-      }
+    if (callStatus === CallStatus.FINISHED && type !== "generate") {
+      handleGenerateFeedback(messages);
     }
-  }, [messages, callStatus, feedbackId, interviewId, router, type, userId]);
+  }, [callStatus, messages, feedbackId, interviewId, router, type, userId]);
+
 
   const handleCall = async () => {
     setCallStatus(CallStatus.CONNECTING);
 
     if (type === "generate") {
-      await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
-        variableValues: {
-          username: userName,
-          userid: userId,
+      vapi.start({
+        model: {
+          provider: "openai",
+          model: "gpt-4o",
+          tools: [createInterviewTool],
+          messages: [{
+            role: 'system',
+            content: 'You are an assistant helping a user create a mock job interview. Ask for the job role, experience level, tech stack, number of questions, and the interview type (technical, behavioral, or mixed).'
+          }]
         },
         clientMessages: [],
         serverMessages: [],
       });
     } else {
-      let formattedQuestions = "";
-      if (questions) {
-        formattedQuestions = questions
-          .map((question) => `- ${question}`)
-          .join("\n");
-      }
-
-      await vapi.start(interviewer, {
-        variableValues: {
-          questions: formattedQuestions,
+      const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
+      vapi.start({
+        firstMessage: "Welcome to your mock interview. Let's begin with your first question.",
+        model: {
+          provider: "openai",
+          model: "gpt-4o",
+          messages: [{
+            role: "system",
+            content: `You are an AI interviewer. Your role is to ask the user the following questions one by one. Do not deviate. The questions are:\n${formattedQuestions}`
+          }]
         },
         clientMessages: [],
         serverMessages: [],
@@ -159,73 +167,43 @@ const Agent = ({
     vapi.stop();
   };
 
+  // UI Code remains the same
   return (
     <>
       <div className="call-view">
-        {/* AI Interviewer Card */}
         <div className="card-interviewer">
           <div className="avatar">
-            <Image
-              src="/ai-avatar.png"
-              alt="profile-image"
-              width={65}
-              height={54}
-              className="object-cover"
-            />
+            <Image src="/ai-avatar.png" alt="profile-image" width={65} height={54} className="object-cover" />
             {isSpeaking && <span className="animate-speak" />}
           </div>
           <h3>AI Interviewer</h3>
         </div>
-
-        {/* User Profile Card */}
         <div className="card-border">
           <div className="card-content">
-            <Image
-              src="/user-avatar.png"
-              alt="profile-image"
-              width={539}
-              height={539}
-              className="rounded-full object-cover size-[120px]"
-            />
+            <Image src="/user-avatar.png" alt="profile-image" width={539} height={539} className="rounded-full object-cover size-[120px]" />
             <h3>{userName}</h3>
           </div>
         </div>
       </div>
-
       {messages.length > 0 && (
         <div className="transcript-border">
           <div className="transcript">
-            <p
-              key={lastMessage}
-              className={cn(
-                "transition-opacity duration-500 opacity-0",
-                "animate-fadeIn opacity-100"
-              )}
-            >
+            <p key={lastMessage} className={cn("transition-opacity duration-500 opacity-0", "animate-fadeIn opacity-100")}>
               {lastMessage}
             </p>
           </div>
         </div>
       )}
-
       <div className="w-full flex justify-center">
         {callStatus !== "ACTIVE" ? (
-          <button className="relative btn-call" onClick={() => handleCall()}>
-            <span
-              className={cn(
-                "absolute animate-ping rounded-full opacity-75",
-                callStatus !== "CONNECTING" && "hidden"
-              )}
-            />
-
+          <button className="relative btn-call" onClick={handleCall}>
+            <span className={cn("absolute animate-ping rounded-full opacity-75", callStatus !== "CONNECTING" && "hidden")} />
             <span className="relative">
-              {callStatus === "INACTIVE" || callStatus === "FINISHED"
-                ? "Call"
-                : ". . ."}
+              {callStatus === "INACTIVE" || callStatus === "FINISHED" ? "Call" : "..."}
             </span>
           </button>
         ) : (
-          <button className="btn-disconnect" onClick={() => handleDisconnect()}>
+          <button className="btn-disconnect" onClick={handleDisconnect}>
             End
           </button>
         )}

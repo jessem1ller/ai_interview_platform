@@ -1,28 +1,38 @@
-import { generateText } from "ai";
-import { google } from "@ai-sdk/google";
-
+import { generateObject } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { z } from "zod";
 import { db } from "@/firebase/admin";
 import { getRandomInterviewCover } from "@/lib/utils";
+import { getCurrentUser } from "@/lib/actions/auth.action";
+
+// 1. Create a configured Google AI client
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.NEXT_GOOGLE_GENERATIVE_AI_API_KEY,
+});
+
+// 2. Define the expected output schema
+const interviewQuestionsSchema = z.object({
+  questions: z.array(z.string()),
+});
 
 export async function POST(request: Request) {
   const { type, role, level, techstack, amount, userid } = await request.json();
 
   try {
-    const { text: questions } = await generateText({
-      model: google("gemini-2.0-flash-001"),
-      prompt: `Prepare questions for a job interview.
+    const user = await getCurrentUser();
+    const effectiveUserId = user?.id || userid;
+
+    // 3. Use generateObject for reliable JSON output
+    const { object } = await generateObject({
+      model: google("gemini-1.5-flash-latest"),
+      schema: interviewQuestionsSchema,
+      prompt: `Prepare exactly ${amount} questions for a job interview.
         The job role is ${role}.
         The job experience level is ${level}.
         The tech stack used in the job is: ${techstack}.
-        The focus between behavioural and technical questions should lean towards: ${type}.
-        The amount of questions required is: ${amount}.
-        Please return only the questions, without any additional text.
-        The questions are going to be read by a voice assistant so do not use "/" or "*" or any other special characters which might break the voice assistant.
-        Return the questions formatted like this:
-        ["Question 1", "Question 2", "Question 3"]
-        
-        Thank you! <3
-    `,
+        The focus should lean towards: ${type}.
+        Do not use special characters like "/" or "*" which might break a voice assistant.
+      `,
     });
 
     const interview = {
@@ -30,19 +40,24 @@ export async function POST(request: Request) {
       type: type,
       level: level,
       techstack: techstack.split(","),
-      questions: JSON.parse(questions),
-      userId: userid,
+      questions: object.questions, // No JSON.parse() needed!
+      userId: effectiveUserId,
       finalized: true,
       coverImage: getRandomInterviewCover(),
       createdAt: new Date().toISOString(),
     };
 
-    await db.collection("interviews").add(interview);
+    const ref = await db.collection("interviews").add(interview);
 
-    return Response.json({ success: true }, { status: 200 });
-  } catch (error) {
-    console.error("Error:", error);
-    return Response.json({ success: false, error: error }, { status: 500 });
+    // 4. Return the new interview's ID in the response
+    return Response.json({ success: true, id: ref.id }, { status: 200 });
+  } catch (error)
+  {
+    console.error("Error generating interview:", error);
+    return Response.json(
+      { success: false, error: "Failed to generate interview" },
+      { status: 500 }
+    );
   }
 }
 

@@ -19,6 +19,9 @@ interface SavedMessage {
   content: string;
 }
 
+const interviewTypes: string[] = ["technical", "behavioral", "mixed"];
+const requiredFields: string[] = ["role", "level", "techstack", "amount", "type"];
+
 const createInterviewTool = {
   type: "function",
   function: {
@@ -31,9 +34,9 @@ const createInterviewTool = {
         level: { type: "string", description: "The job experience level, e.g., Senior, Junior" },
         techstack: { type: "string", description: "Comma-separated list of technologies, e.g., React, TypeScript, Node.js" },
         amount: { type: "string", description: "The number of questions, e.g., 5, 10" },
-        type: { type: "string", enum: ["technical", "behavioral", "mixed"] as string[], description: "The type of interview questions." },
+        type: { type: "string", enum: interviewTypes, description: "The type of interview questions." },
       },
-      required: ["role", "level", "techstack", "amount", "type"] as string[],
+      required: requiredFields,
     },
   },
 } as const;
@@ -48,10 +51,13 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
 
   const handleMessage = useCallback(async (message: any) => {
     if (message.type === "transcript" && message.transcriptType === "final") {
-      const newMessage = { role: message.role, content: message.transcript };
+      // --- This is the corrected line ---
+      const newMessage = {
+        role: message.role as 'user' | 'assistant', // Added type assertion
+        content: message.transcript,
+      };
       setMessages((prev) => [...prev, newMessage]);
     }
-
     if (
       type === "generate" &&
       message.type === "function-call" &&
@@ -97,7 +103,6 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     vapi.on("speech-start", onSpeechStart);
     vapi.on("speech-end", onSpeechEnd);
     vapi.on("error", onError);
-
     return () => {
       vapi.off("message", handleMessage);
       vapi.off("call-start", onCallStart);
@@ -112,7 +117,6 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     if (messages.length > 0) {
       setLastMessage(messages[messages.length - 1].content);
     }
-
     const handleGenerateFeedback = async (transcript: SavedMessage[]) => {
       if (!transcript || transcript.length === 0) return;
       console.log("handleGenerateFeedback");
@@ -124,7 +128,6 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
         router.push("/");
       }
     };
-
     if (callStatus === CallStatus.FINISHED && type !== "generate") {
       handleGenerateFeedback(messages);
     }
@@ -135,23 +138,24 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
 
   if (type === "generate") {
     vapi.start({
-      firstMessage: "Hello! I can help you create an interview to help land your dream job. My name is Johnny Ai. To get started, what is the job role you're preparing for?",
+      firstMessage: "Hello! I can help you create a mock interview. To get started, what is the job role you're preparing for?",
       model: {
         provider: "openai",
         model: "gpt-4o",
         tools: [createInterviewTool],
         messages: [{
           role: 'system',
-          content: 'You are a friendly assistant helping a user design a mock interview. Your goal is to gather several pieces of information. Guide the user through this process conversationally, asking only one question at a time. Do not list all the required information at once.'
+          content: "You are an assistant that helps a user create a mock interview. Your primary goal is to collect all necessary information by asking questions one at a time. Once you have all the details, you MUST call the `createInterview` function. Do not end the conversation until the function has been successfully called."
         }]
       },
+      // ✅ Add these two empty arrays
       clientMessages: [],
-      serverMessages: []
+      serverMessages: [],
     });
   } else {
     const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
     vapi.start({
-      firstMessage: "Welcome to your interview at Big Tech Corp. I'm Sarai Ai. Let's begin with your first question.",
+      firstMessage: "Welcome to your mock interview. Let's begin with your first question.",
       model: {
         provider: "openai",
         model: "gpt-4o",
@@ -160,19 +164,18 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
           content: `You are an AI interviewer. Your role is to ask the user the following questions one by one. Do not deviate. The questions are:\n${formattedQuestions}`
         }]
       },
+      // ✅ Add these two empty arrays
       clientMessages: [],
-      serverMessages: []
+      serverMessages: [],
     });
   }
 };
 
-  // Function to end a call
   const handleDisconnect = () => {
     setCallStatus(CallStatus.FINISHED);
     vapi.stop();
   };
 
-  // The component's JSX
   return (
     <>
       <div className="call-view">

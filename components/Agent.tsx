@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { vapi } from "@/lib/vapi.sdk";
@@ -46,51 +46,51 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
 
-  useEffect(() => {
-    const handleMessage = async (message: any) => {
-      if (message.type === "transcript" && message.transcriptType === "final") {
-        const newMessage = { role: message.role, content: message.transcript };
-        setMessages((prev) => [...prev, newMessage]);
-      }
+  const handleMessage = useCallback(async (message: any) => {
+    if (message.type === "transcript" && message.transcriptType === "final") {
+      const newMessage = { role: message.role, content: message.transcript };
+      setMessages((prev) => [...prev, newMessage]);
+    }
 
-      if (
-        type === "generate" &&
-        message.type === "function-call" &&
-        message.functionCall?.name === "createInterview"
-      ) {
-        const interviewDetails = message.functionCall.parameters;
-        try {
-          const response = await fetch("/api/vapi/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...interviewDetails, userid: userId }),
-          });
-          const result = await response.json();
-          if (result.success && result.id) {
-            router.push(`/interview/${result.id}`);
-          } else {
-            console.error("Failed to create interview:", result.error);
-            router.push('/');
-          }
-        } catch (error) {
-          console.error("Error calling API:", error);
-        } finally {
-          vapi.stop();
+    if (
+      type === "generate" &&
+      message.type === "function-call" &&
+      message.functionCall?.name === "createInterview"
+    ) {
+      const interviewDetails = message.functionCall.parameters;
+      try {
+        const response = await fetch("/api/vapi/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...interviewDetails, userid: userId }),
+        });
+        const result = await response.json();
+        if (result.success && result.id) {
+          router.push(`/interview/${result.id}`);
+        } else {
+          console.error("Failed to create interview:", result.error);
+          router.push('/');
         }
+      } catch (error) {
+        console.error("Error calling API:", error);
+      } finally {
+        vapi.stop();
       }
-    };
+    }
+  }, [type, userId, router]);
 
-    const onCallStart = () => setCallStatus(CallStatus.ACTIVE);
-    const onCallEnd = () => setCallStatus(CallStatus.FINISHED);
-    const onSpeechStart = () => setIsSpeaking(true);
-    const onSpeechEnd = () => setIsSpeaking(false);
-    const onError = (error: any) => {
-      console.log("Error:", error);
-      if (error?.errorMsg === 'Meeting has ended') {
-        setCallStatus(CallStatus.FINISHED);
-      }
-    };
+  const onCallStart = useCallback(() => setCallStatus(CallStatus.ACTIVE), []);
+  const onCallEnd = useCallback(() => setCallStatus(CallStatus.FINISHED), []);
+  const onSpeechStart = useCallback(() => setIsSpeaking(true), []);
+  const onSpeechEnd = useCallback(() => setIsSpeaking(false), []);
+  const onError = useCallback((error: any) => {
+    console.log("Error:", error);
+    if (error?.errorMsg === 'Meeting has ended') {
+      setCallStatus(CallStatus.FINISHED);
+    }
+  }, []);
 
+  useEffect(() => {
     vapi.on("message", handleMessage);
     vapi.on("call-start", onCallStart);
     vapi.on("call-end", onCallEnd);
@@ -106,9 +106,13 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
       vapi.off("speech-end", onSpeechEnd);
       vapi.off("error", onError);
     };
-  }, [type, userId, router]);
+  }, [handleMessage, onCallStart, onCallEnd, onSpeechStart, onSpeechEnd, onError]);
 
   useEffect(() => {
+    if (messages.length > 0) {
+      setLastMessage(messages[messages.length - 1].content);
+    }
+
     const handleGenerateFeedback = async (transcript: SavedMessage[]) => {
       if (!transcript || transcript.length === 0) return;
       console.log("handleGenerateFeedback");
@@ -126,49 +130,49 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     }
   }, [callStatus, messages, feedbackId, interviewId, router, type, userId]);
 
-
   const handleCall = async () => {
-    setCallStatus(CallStatus.CONNECTING);
+  setCallStatus(CallStatus.CONNECTING);
 
-    if (type === "generate") {
-      vapi.start({
-          firstMessage: "Hello! My name is Elon Musk and I can help you create a mock interview. To get started, what is the job role you're preparing for?",
-        model: {
-          provider: "openai",
-          model: "gpt-4o",
-          tools: [createInterviewTool],
-          messages: [{
-            role: 'system',
-            content: 'You are an assistant helping a user create a mock job interview. Ask for the job role, experience level, tech stack, number of questions, and the interview type (technical, behavioral, or mixed). Ask these questions, one at a time, in a friendly, conversational manner.'
-          }]
-        
-        },
-        clientMessages: [],
-        serverMessages: [],
-      });
-    } else {
-      const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
-      vapi.start({
-        firstMessage: "Welcome to your mock interview. Let's begin with your first question.",
-        model: {
-          provider: "openai",
-          model: "gpt-4o",
-          messages: [{
-            role: "system",
-            content: `You are an AI interviewer. Your role is to ask the user the following questions one by one. Do not deviate. The questions are:\n${formattedQuestions}`
-          }]
-        },
-        clientMessages: [],
-        serverMessages: [],
-      });
-    }
-  };
+  if (type === "generate") {
+    vapi.start({
+      firstMessage: "Hello! I can help you create an interview to help land your dream job. My name is Johnny Ai. To get started, what is the job role you're preparing for?",
+      model: {
+        provider: "openai",
+        model: "gpt-4o",
+        tools: [createInterviewTool],
+        messages: [{
+          role: 'system',
+          content: 'You are a friendly assistant helping a user design a mock interview. Your goal is to gather several pieces of information. Guide the user through this process conversationally, asking only one question at a time. Do not list all the required information at once.'
+        }]
+      },
+      clientMessages: [],
+      serverMessages: []
+    });
+  } else {
+    const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
+    vapi.start({
+      firstMessage: "Welcome to your interview at Big Tech Corp. I'm Sarai Ai. Let's begin with your first question.",
+      model: {
+        provider: "openai",
+        model: "gpt-4o",
+        messages: [{
+          role: "system",
+          content: `You are an AI interviewer. Your role is to ask the user the following questions one by one. Do not deviate. The questions are:\n${formattedQuestions}`
+        }]
+      },
+      clientMessages: [],
+      serverMessages: []
+    });
+  }
+};
 
+  // Function to end a call
   const handleDisconnect = () => {
     setCallStatus(CallStatus.FINISHED);
     vapi.stop();
   };
 
+  // The component's JSX
   return (
     <>
       <div className="call-view">

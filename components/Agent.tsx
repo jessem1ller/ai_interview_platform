@@ -132,14 +132,16 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
 
     if (type === "generate") {
       vapi.start({
+          firstMessage: "Hello! My name is Elon Musk and I can help you create a mock interview. To get started, what is the job role you're preparing for?",
         model: {
           provider: "openai",
           model: "gpt-4o",
           tools: [createInterviewTool],
           messages: [{
             role: 'system',
-            content: 'You are an assistant helping a user create a mock job interview. Ask for the job role, experience level, tech stack, number of questions, and the interview type (technical, behavioral, or mixed).'
+            content: 'You are an assistant helping a user create a mock job interview. Ask for the job role, experience level, tech stack, number of questions, and the interview type (technical, behavioral, or mixed). Ask these questions, one at a time, in a friendly, conversational manner.'
           }]
+        
         },
         clientMessages: [],
         serverMessages: [],
@@ -167,7 +169,6 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     vapi.stop();
   };
 
-  // UI Code remains the same
   return (
     <>
       <div className="call-view">

@@ -7,64 +7,45 @@ import { cn } from "@/lib/utils";
 import { vapi } from "@/lib/vapi.sdk";
 import { createFeedback } from "@/lib/actions/general.action";
 
+enum CallStatus {
+  INACTIVE = "INACTIVE",
+  CONNECTING = "CONNECTING",
+  ACTIVE = "ACTIVE",
+  FINISHED = "FINISHED",
+}
+
+interface SavedMessage {
+  role: "user" | "system" | "assistant";
+  content: string;
+}
+
 const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: AgentProps) => {
   const router = useRouter();
-  const [callStatus, setCallStatus] = useState("INACTIVE");
-  const [messages, setMessages] = useState<any[]>([]);
+  const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
+  const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [lastMessage, setLastMessage] = useState("");
+  const [lastMessage, setLastMessage] = useState<string>("");
 
   const firstName = userName?.split(' ')[0] || 'there';
 
   const handleMessage = useCallback(async (message: any) => {
-    // Log all messages for debugging
-    console.log("VAPI MESSAGE RECEIVED:", message);
-
     if (message.type === "transcript" && message.transcriptType === "final") {
-      setMessages((prev) => [...prev, { role: message.role, content: message.transcript }]);
+      const newMessage = {
+        role: message.role as 'user' | 'assistant',
+        content: message.transcript,
+      };
+      setMessages((prev) => [...prev, newMessage]);
     }
+  }, []);
 
-    // --- Start of Corrected Code ---
-    // Check for the new 'tool-calls' event type
-    if (
-      type === "generate" &&
-      message.type === "tool-calls" &&
-      message.toolCalls &&
-      message.toolCalls[0]?.function?.name === "createInterview"
-    ) {
-      // Access the parameters from the new structure
-      const interviewDetails = message.toolCalls[0].function.parameters;
-      
-      try {
-        const response = await fetch("/api/vapi/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...interviewDetails, userid: userId }),
-        });
-        const result = await response.json();
-        if (result.success && result.id) {
-          router.push(`/interview/${result.id}`);
-        } else {
-          router.push('/');
-        }
-      } catch (error) {
-        console.error("Error calling API:", error);
-      } finally {
-        vapi.stop();
-      }
-    }
-    // --- End of Corrected Code ---
-
-  }, [type, userId, router]);
-  
-  const onCallStart = useCallback(() => setCallStatus("ACTIVE"), []);
-  const onCallEnd = useCallback(() => setCallStatus("FINISHED"), []);
+  const onCallStart = useCallback(() => setCallStatus(CallStatus.ACTIVE), []);
+  const onCallEnd = useCallback(() => setCallStatus(CallStatus.FINISHED), []);
   const onSpeechStart = useCallback(() => setIsSpeaking(true), []);
   const onSpeechEnd = useCallback(() => setIsSpeaking(false), []);
   const onError = useCallback((error: any) => {
     console.log("Error:", error);
     if (error?.errorMsg === 'Meeting has ended') {
-      setCallStatus("FINISHED");
+      setCallStatus(CallStatus.FINISHED);
     }
   }, []);
 
@@ -89,7 +70,7 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     if (messages.length > 0) {
       setLastMessage(messages[messages.length - 1].content);
     }
-    const handleGenerateFeedback = async (transcript: any[]) => {
+    const handleGenerateFeedback = async (transcript: SavedMessage[]) => {
       if (!transcript || transcript.length === 0) return;
       const { success } = await createFeedback({ interviewId: interviewId!, userId: userId!, transcript, feedbackId });
       if (success) {
@@ -98,33 +79,53 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
         router.push("/");
       }
     };
-    if (callStatus === "FINISHED" && type !== "generate") {
+    if (callStatus === CallStatus.FINISHED && type !== "generate") {
       handleGenerateFeedback(messages);
     }
   }, [callStatus, messages, feedbackId, interviewId, router, type, userId]);
 
   const handleCall = async () => {
-    setCallStatus("CONNECTING");
+    setCallStatus(CallStatus.CONNECTING);
 
     if (type === "generate") {
-      vapi.start(process.env.NEXT_PUBLIC_VAPI_GENERATION_ASSISTANT_ID!, {
+      const workflowId = process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID;
+      const variables = {
         variableValues: {
-          name: firstName,
+          username: firstName,
+          userid: userId
         }
+      };
+
+      // ✅ THE FINAL DEBUG LOG
+      console.log("Attempting to start Vapi WORKFLOW with:", {
+        id: workflowId,
+        payload: variables
       });
+
+      vapi.start(workflowId!, variables);
+
     } else {
+      const assistantId = process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID;
       const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
-      vapi.start(process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID!, {
+      const variables = {
         variableValues: {
           questions: formattedQuestions,
           name: firstName
         }
+      };
+      
+      // ✅ THE FINAL DEBUG LOG
+      console.log("Attempting to start Vapi ASSISTANT with:", {
+        id: assistantId,
+        payload: variables
       });
+      
+      vapi.start(assistantId!, variables);
     }
   };
 
   const handleDisconnect = () => {
-    setCallStatus("FINISHED");
+    setCallStatus(CallStatus.FINISHED);
     vapi.stop();
   };
 

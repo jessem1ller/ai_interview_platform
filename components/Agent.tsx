@@ -17,19 +17,24 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
   const firstName = userName?.split(' ')[0] || 'there';
 
   const handleMessage = useCallback(async (message: any) => {
-    // ✅ NEW DEBUG LOG: Let's inspect every message from Vapi
+    // Log all messages for debugging
     console.log("VAPI MESSAGE RECEIVED:", message);
 
     if (message.type === "transcript" && message.transcriptType === "final") {
       setMessages((prev) => [...prev, { role: message.role, content: message.transcript }]);
     }
 
+    // --- Start of Corrected Code ---
+    // Check for the new 'tool-calls' event type
     if (
       type === "generate" &&
-      message.type === "function-call" &&
-      message.functionCall?.name === "createInterview"
+      message.type === "tool-calls" &&
+      message.toolCalls &&
+      message.toolCalls[0]?.function?.name === "createInterview"
     ) {
-      const interviewDetails = message.functionCall.parameters;
+      // Access the parameters from the new structure
+      const interviewDetails = message.toolCalls[0].function.parameters;
+      
       try {
         const response = await fetch("/api/vapi/generate", {
           method: "POST",
@@ -48,6 +53,8 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
         vapi.stop();
       }
     }
+    // --- End of Corrected Code ---
+
   }, [type, userId, router]);
   
   const onCallStart = useCallback(() => setCallStatus("ACTIVE"), []);

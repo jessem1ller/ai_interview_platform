@@ -12,42 +12,57 @@ const interviewQuestionsSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const { type, role, level, techstack, amount, userid } = await request.json();
+  let toolCallId: string | undefined;
 
   try {
-    const user = await getCurrentUser();
-    const effectiveUserId = user?.id || userid;
+    const { toolCall } = await request.json();
+    
+    const { type, role, level, techstack, amount, userid } = toolCall.parameters;
+    toolCallId = toolCall.id;
 
-    if (!effectiveUserId) {
-      throw new Error("User ID is missing and is required to create an interview.");
+    if (!userid) {
+      throw new Error("User ID is missing from the tool call parameters.");
     }
 
     const { object } = await generateObject({
       model: google("gemini-1.5-flash-latest"),
       schema: interviewQuestionsSchema,
-      prompt: `Prepare exactly ${amount || 5} questions for a job interview. The job role is ${role || 'General'}. The job experience level is ${level || 'Intermediate'}. The tech stack used in the job is: ${techstack || 'Not specified'}. The focus should lean towards: ${type || 'Mixed'}. Do not use special characters like "/" or "*" which might break a voice assistant.`,
+      prompt: `Prepare exactly ${amount || 5} questions for a job interview. The job role is ${role || 'General'}. The job experience level is ${level || 'Intermediate'}. The tech stack used in the job is: ${techstack || 'Not specified'}. The focus should lean towards: ${type || 'Mixed'}. Do not use special characters.`,
     });
 
     const interview = {
       role: role || "General Role",
       type: type || "Mixed",
       level: level || "Intermediate",
-      techstack: (techstack || "").split(",").filter(Boolean),
+      // ✅ Added (s: string) here to fix the TypeScript error
+      techstack: (techstack || "").split(",").map((s: string) => s.trim()).filter(Boolean),
       questions: object.questions,
-      userId: effectiveUserId,
+      userId: userid,
       finalized: true,
       coverImage: getRandomInterviewCover(),
       createdAt: new Date().toISOString(),
     };
 
-    const ref = await db.collection("interviews").add(interview);
+    await db.collection("interviews").add(interview);
 
-    return Response.json({ success: true, id: ref.id }, { status: 200 });
+    return Response.json({
+      results: [
+        {
+          toolCallId: toolCallId,
+          result: "Your mock interview has been successfully created.",
+        },
+      ],
+    });
   } catch (error) {
     console.error("Error generating interview:", error);
-    return Response.json(
-      { success: false, error: "Failed to generate interview" },
-      { status: 500 }
-    );
+    
+    return Response.json({
+      results: [
+        {
+          toolCallId: toolCallId,
+          result: "Sorry, there was an error creating your interview. Please try again.",
+        },
+      ],
+    });
   }
 }

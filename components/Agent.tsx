@@ -7,59 +7,23 @@ import { cn } from "@/lib/utils";
 import { vapi } from "@/lib/vapi.sdk";
 import { createFeedback } from "@/lib/actions/general.action";
 
-enum CallStatus {
-  INACTIVE = "INACTIVE",
-  CONNECTING = "CONNECTING",
-  ACTIVE = "ACTIVE",
-  FINISHED = "FINISHED",
-}
-
-interface SavedMessage {
-  role: "user" | "system" | "assistant";
-  content: string;
-}
-
-const interviewTypes: string[] = ["technical", "behavioral", "mixed"];
-const requiredFields: string[] = ["role", "level", "techstack", "amount", "type"];
-
-const createInterviewTool = {
-  type: "function",
-  function: {
-    name: "createInterview",
-    description: "Creates a new mock interview based on user specifications.",
-    parameters: {
-      type: "object",
-      properties: {
-        role: { type: "string", description: "The job role, e.g., Senior Frontend Developer" },
-        level: { type: "string", description: "The job experience level, e.g., Senior, Junior" },
-        techstack: { type: "string", description: "Comma-separated list of technologies, e.g., React, TypeScript, Node.js" },
-        amount: { type: "string", description: "The number of questions, e.g., 5, 10" },
-        type: { type: "string", enum: interviewTypes, description: "The type of interview questions." },
-      },
-      required: requiredFields,
-    },
-  },
-} as const;
-
-
 const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: AgentProps) => {
   const router = useRouter();
-  const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
-  const [messages, setMessages] = useState<SavedMessage[]>([]);
+  const [callStatus, setCallStatus] = useState("INACTIVE");
+  const [messages, setMessages] = useState<any[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [lastMessage, setLastMessage] = useState<string>("");
+  const [lastMessage, setLastMessage] = useState("");
 
-  // ✅ Define firstName here, at the top of the component
   const firstName = userName?.split(' ')[0] || 'there';
 
   const handleMessage = useCallback(async (message: any) => {
+    // ✅ NEW DEBUG LOG: Let's inspect every message from Vapi
+    console.log("VAPI MESSAGE RECEIVED:", message);
+
     if (message.type === "transcript" && message.transcriptType === "final") {
-      const newMessage = {
-        role: message.role as 'user' | 'assistant',
-        content: message.transcript,
-      };
-      setMessages((prev) => [...prev, newMessage]);
+      setMessages((prev) => [...prev, { role: message.role, content: message.transcript }]);
     }
+
     if (
       type === "generate" &&
       message.type === "function-call" &&
@@ -76,7 +40,6 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
         if (result.success && result.id) {
           router.push(`/interview/${result.id}`);
         } else {
-          console.error("Failed to create interview:", result.error);
           router.push('/');
         }
       } catch (error) {
@@ -86,15 +49,15 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
       }
     }
   }, [type, userId, router]);
-
-  const onCallStart = useCallback(() => setCallStatus(CallStatus.ACTIVE), []);
-  const onCallEnd = useCallback(() => setCallStatus(CallStatus.FINISHED), []);
+  
+  const onCallStart = useCallback(() => setCallStatus("ACTIVE"), []);
+  const onCallEnd = useCallback(() => setCallStatus("FINISHED"), []);
   const onSpeechStart = useCallback(() => setIsSpeaking(true), []);
   const onSpeechEnd = useCallback(() => setIsSpeaking(false), []);
   const onError = useCallback((error: any) => {
     console.log("Error:", error);
     if (error?.errorMsg === 'Meeting has ended') {
-      setCallStatus(CallStatus.FINISHED);
+      setCallStatus("FINISHED");
     }
   }, []);
 
@@ -119,59 +82,42 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     if (messages.length > 0) {
       setLastMessage(messages[messages.length - 1].content);
     }
-    const handleGenerateFeedback = async (transcript: SavedMessage[]) => {
+    const handleGenerateFeedback = async (transcript: any[]) => {
       if (!transcript || transcript.length === 0) return;
-      console.log("handleGenerateFeedback");
-      const { success, feedbackId: id } = await createFeedback({ interviewId: interviewId!, userId: userId!, transcript, feedbackId });
-      if (success && id) {
+      const { success } = await createFeedback({ interviewId: interviewId!, userId: userId!, transcript, feedbackId });
+      if (success) {
         router.push(`/interview/${interviewId}/feedback`);
       } else {
-        console.log("Error saving feedback");
         router.push("/");
       }
     };
-    if (callStatus === CallStatus.FINISHED && type !== "generate") {
+    if (callStatus === "FINISHED" && type !== "generate") {
       handleGenerateFeedback(messages);
     }
   }, [callStatus, messages, feedbackId, interviewId, router, type, userId]);
 
   const handleCall = async () => {
-    setCallStatus(CallStatus.CONNECTING);
+    setCallStatus("CONNECTING");
+
     if (type === "generate") {
-      vapi.start({
-        firstMessage: `Hello ${firstName}! My name is Johnny Five and I can help you create a mock interview to get your dream job. What is the job role you're preparing for?`,
-        model: {
-          provider: "openai",
-          model: "gpt-4o",
-          tools: [createInterviewTool],
-          messages: [{
-            role: 'system',
-            content: `You are an assistant helping a user named ${firstName} create a mock interview. Your primary goal is to collect all necessary information by asking questions one at a time. Once you have all the details, you MUST call the \`createInterview\` function. Do not end the conversation until the function has been successfully called.`
-          }]
-        },
-        clientMessages: undefined,
-        serverMessages: undefined,
+      vapi.start(process.env.NEXT_PUBLIC_VAPI_GENERATION_ASSISTANT_ID!, {
+        variableValues: {
+          name: firstName,
+        }
       });
     } else {
       const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
-      vapi.start({
-        firstMessage: `Welcome to your mock interview, ${firstName}. Let's begin with your first question.`,
-        model: {
-          provider: "openai",
-          model: "gpt-4o",
-          messages: [{
-            role: "system",
-            content: `You are an AI interviewer conducting an interview with ${firstName}. Your role is to ask the user the following questions one by one. Do not deviate. The questions are:\n${formattedQuestions}`
-          }]
-        },
-        clientMessages: undefined,
-        serverMessages: undefined,
+      vapi.start(process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID!, {
+        variableValues: {
+          questions: formattedQuestions,
+          name: firstName
+        }
       });
     }
   };
 
   const handleDisconnect = () => {
-    setCallStatus(CallStatus.FINISHED);
+    setCallStatus("FINISHED");
     vapi.stop();
   };
 

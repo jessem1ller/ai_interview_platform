@@ -153,8 +153,8 @@ End the conversation on a polite and positive note.
       },
     ],
   },
-  clientMessages: [],
-  serverMessages: [],
+  clientMessages: undefined,
+  serverMessages: undefined,
 };
 
 export const feedbackSchema = z.object({

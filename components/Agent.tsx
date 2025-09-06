@@ -28,6 +28,7 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
 
   const firstName = userName?.split(' ')[0] || 'there';
 
+  // This function only needs to handle transcripts.
   const handleMessage = useCallback(async (message: any) => {
     if (message.type === "transcript" && message.transcriptType === "final") {
       const newMessage = {
@@ -88,21 +89,21 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     setCallStatus(CallStatus.CONNECTING);
 
     if (type === "generate") {
-      const workflowId = process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID;
+      // ✅ Changed to call the Generation ASSISTANT ID
+      const assistantId = process.env.NEXT_PUBLIC_VAPI_GENERATION_ASSISTANT_ID;
       const variables = {
         variableValues: {
-          username: firstName,
+          name: firstName, // ✅ Changed to 'name' for consistency
           userid: userId
         }
       };
 
-      // ✅ THE FINAL DEBUG LOG
-      console.log("Attempting to start Vapi WORKFLOW with:", {
-        id: workflowId,
+      console.log("Attempting to start Vapi GENERATION ASSISTANT with:", {
+        id: assistantId,
         payload: variables
       });
 
-      vapi.start(workflowId!, variables);
+      vapi.start(assistantId!, variables);
 
     } else {
       const assistantId = process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID;
@@ -114,8 +115,7 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
         }
       };
       
-      // ✅ THE FINAL DEBUG LOG
-      console.log("Attempting to start Vapi ASSISTANT with:", {
+      console.log("Attempting to start Vapi INTERVIEWER ASSISTANT with:", {
         id: assistantId,
         payload: variables
       });

@@ -7,43 +7,24 @@ import { cn } from "@/lib/utils";
 import { vapi } from "@/lib/vapi.sdk";
 import { createFeedback } from "@/lib/actions/general.action";
 
-enum CallStatus {
-  INACTIVE = "INACTIVE",
-  CONNECTING = "CONNECTING",
-  ACTIVE = "ACTIVE",
-  FINISHED = "FINISHED",
-}
-
-interface SavedMessage {
-  role: "user" | "system" | "assistant";
-  content: string;
-}
-
 const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: AgentProps) => {
   const router = useRouter();
-  const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
-  const [messages, setMessages] = useState<SavedMessage[]>([]);
+  const [callStatus, setCallStatus] = useState("INACTIVE");
+  const [messages, setMessages] = useState<any[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [lastMessage, setLastMessage] = useState<string>("");
-
+  const [lastMessage, setLastMessage] = useState("");
   const firstName = userName?.split(' ')[0] || 'there';
 
   // This handler only needs to listen for transcripts to display them.
   const handleMessage = useCallback(async (message: any) => {
     if (message.type === "transcript" && message.transcriptType === "final") {
-      const newMessage = {
-        role: message.role as 'user' | 'assistant',
-        content: message.transcript,
-      };
-      setMessages((prev) => [...prev, newMessage]);
+      setMessages((prev) => [...prev, { role: message.role, content: message.transcript }]);
     }
   }, []);
 
-  const onCallStart = useCallback(() => setCallStatus(CallStatus.ACTIVE), []);
+  const onCallStart = useCallback(() => setCallStatus("ACTIVE"), []);
   const onCallEnd = useCallback(() => {
-    setCallStatus(CallStatus.FINISHED);
-    // After a generation call ends, the user should be on the new interview page.
-    // We will refresh the homepage to show the new interview card.
+    setCallStatus("FINISHED");
     if (type === "generate") {
       router.push('/');
       router.refresh();
@@ -52,12 +33,7 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
   
   const onSpeechStart = useCallback(() => setIsSpeaking(true), []);
   const onSpeechEnd = useCallback(() => setIsSpeaking(false), []);
-  const onError = useCallback((error: any) => {
-    console.log("Error:", error);
-    if (error?.errorMsg === 'Meeting has ended') {
-      setCallStatus(CallStatus.FINISHED);
-    }
-  }, []);
+  const onError = useCallback((error: any) => console.log("Error:", error), []);
 
   useEffect(() => {
     vapi.on("message", handleMessage);
@@ -80,7 +56,7 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     if (messages.length > 0) {
       setLastMessage(messages[messages.length - 1].content);
     }
-    const handleGenerateFeedback = async (transcript: SavedMessage[]) => {
+    const handleGenerateFeedback = async (transcript: any[]) => {
       if (!transcript || transcript.length === 0) return;
       const { success } = await createFeedback({ interviewId: interviewId!, userId: userId!, transcript, feedbackId });
       if (success) {
@@ -89,35 +65,51 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
         router.push("/");
       }
     };
-    if (callStatus === CallStatus.FINISHED && type !== "generate") {
+    if (callStatus === "FINISHED" && type !== "generate") {
       handleGenerateFeedback(messages);
     }
   }, [callStatus, messages, feedbackId, interviewId, router, type, userId]);
 
   const handleCall = async () => {
-    setCallStatus(CallStatus.CONNECTING);
+    setCallStatus("CONNECTING");
 
     if (type === "generate") {
-      vapi.start(process.env.NEXT_PUBLIC_VAPI_GENERATION_ASSISTANT_ID!, {
+      const assistantId = process.env.NEXT_PUBLIC_VAPI_GENERATION_ASSISTANT_ID;
+      const variables = {
         variableValues: {
           username: firstName,
           userid: userId
         }
+      };
+
+      // ✅ ADD THIS LOG TO SEE THE DATA
+      console.log("SENDING TO VAPI:", {
+        assistantId: assistantId,
+        payload: variables
       });
+
+      vapi.start(assistantId!, variables);
+
     } else {
+      const assistantId = process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID;
       const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
-      vapi.start(process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID!, {
+      const variables = {
         variableValues: {
           questions: formattedQuestions,
           name: firstName
         }
+      };
+      
+      console.log("SENDING TO VAPI:", {
+        assistantId: assistantId,
+        payload: variables
       });
+      
+      vapi.start(assistantId!, variables);
     }
   };
 
-  const handleDisconnect = () => {
-    vapi.stop();
-  };
+  const handleDisconnect = () => vapi.stop();
 
   return (
     <>

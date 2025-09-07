@@ -7,38 +7,55 @@ import { cn } from "@/lib/utils";
 import { vapi } from "@/lib/vapi.sdk";
 import { createFeedback } from "@/lib/actions/general.action";
 
+enum CallStatus {
+  INACTIVE = "INACTIVE",
+  CONNECTING = "CONNECTING",
+  ACTIVE = "ACTIVE",
+  FINISHED = "FINISHED",
+}
+
+interface SavedMessage {
+  role: "user" | "system" | "assistant";
+  content: string;
+}
+
 const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: AgentProps) => {
   const router = useRouter();
-  const [callStatus, setCallStatus] = useState("INACTIVE");
-  const [messages, setMessages] = useState<any[]>([]);
+  const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
+  const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [lastMessage, setLastMessage] = useState("");
+  const [lastMessage, setLastMessage] = useState<string>("");
 
   const firstName = userName?.split(' ')[0] || 'there';
 
+  // This handler only needs to listen for transcripts to display them.
   const handleMessage = useCallback(async (message: any) => {
-    // This logic is for the server-side tool in Vapi and can be simplified
-    // as the browser no longer needs to listen for the tool-call event.
     if (message.type === "transcript" && message.transcriptType === "final") {
-      setMessages((prev) => [...prev, { role: message.role, content: message.transcript }]);
+      const newMessage = {
+        role: message.role as 'user' | 'assistant',
+        content: message.transcript,
+      };
+      setMessages((prev) => [...prev, newMessage]);
     }
   }, []);
-  
-  const onCallStart = useCallback(() => setCallStatus("ACTIVE"), []);
+
+  const onCallStart = useCallback(() => setCallStatus(CallStatus.ACTIVE), []);
   const onCallEnd = useCallback(() => {
-    setCallStatus("FINISHED");
-    // If the interview was generated via a server-side tool, redirect home.
+    setCallStatus(CallStatus.FINISHED);
+    // After a generation call ends, the user should be on the new interview page.
+    // We will refresh the homepage to show the new interview card.
     if (type === "generate") {
       router.push('/');
+      router.refresh();
     }
   }, [type, router]);
-
+  
   const onSpeechStart = useCallback(() => setIsSpeaking(true), []);
   const onSpeechEnd = useCallback(() => setIsSpeaking(false), []);
   const onError = useCallback((error: any) => {
     console.log("Error:", error);
     if (error?.errorMsg === 'Meeting has ended') {
-      setCallStatus("FINISHED");
+      setCallStatus(CallStatus.FINISHED);
     }
   }, []);
 
@@ -63,7 +80,7 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     if (messages.length > 0) {
       setLastMessage(messages[messages.length - 1].content);
     }
-    const handleGenerateFeedback = async (transcript: any[]) => {
+    const handleGenerateFeedback = async (transcript: SavedMessage[]) => {
       if (!transcript || transcript.length === 0) return;
       const { success } = await createFeedback({ interviewId: interviewId!, userId: userId!, transcript, feedbackId });
       if (success) {
@@ -72,18 +89,17 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
         router.push("/");
       }
     };
-    if (callStatus === "FINISHED" && type !== "generate") {
+    if (callStatus === CallStatus.FINISHED && type !== "generate") {
       handleGenerateFeedback(messages);
     }
   }, [callStatus, messages, feedbackId, interviewId, router, type, userId]);
 
   const handleCall = async () => {
-    setCallStatus("CONNECTING");
+    setCallStatus(CallStatus.CONNECTING);
 
     if (type === "generate") {
       vapi.start(process.env.NEXT_PUBLIC_VAPI_GENERATION_ASSISTANT_ID!, {
         variableValues: {
-          // ✅ Changed 'name' to 'username' to match your Vapi tool
           username: firstName,
           userid: userId
         }
@@ -100,7 +116,6 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
   };
 
   const handleDisconnect = () => {
-    setCallStatus("FINISHED");
     vapi.stop();
   };
 

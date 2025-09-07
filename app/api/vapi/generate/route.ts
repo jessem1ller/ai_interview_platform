@@ -1,3 +1,5 @@
+// in /api/vapi/generate/route.ts
+
 import { generateObject } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { z } from "zod";
@@ -11,14 +13,15 @@ const interviewQuestionsSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  let toolCallId: string | undefined;
+  // Vapi sends the toolCallId in the headers for server-side tools
+  const toolCallId = request.headers.get('X-Vapi-Tool-Call-Id');
+
   try {
-    const { toolCall } = await request.json();
-    const { type, role, level, techstack, amount, userid, username } = toolCall.parameters;
-    toolCallId = toolCall.id;
+    // The parameters are in the main body, not nested in "toolCall"
+    const { type, role, level, techstack, amount, userid, username } = await request.json();
 
     if (!userid) {
-      throw new Error("User ID is missing.");
+      throw new Error("User ID is missing from the Vapi request.");
     }
 
     const { object } = await generateObject({
@@ -50,4 +53,4 @@ export async function POST(request: Request) {
       results: [{ toolCallId: toolCallId, result: "There was an error creating the interview." }],
     });
   }
-}
+};

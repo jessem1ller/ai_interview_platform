@@ -119,7 +119,7 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
             <Image src="/ai-avatar.png" alt="profile-image" width={65} height={54} className="object-cover" />
             {isSpeaking && <span className="animate-speak" />}
           </div>
-          <h3>AI Interviewer</h3>
+          <h3>Johnny Five Interviewer</h3>
         </div>
         <div className="card-border">
           <div className="card-content">

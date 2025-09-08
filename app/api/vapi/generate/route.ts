@@ -1,5 +1,3 @@
-// in /api/vapi/generate/route.ts
-
 import { generateObject } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { z } from "zod";
@@ -14,7 +12,6 @@ const interviewQuestionsSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    // The body is now a simple JSON object from our Agent.tsx
     const { type, role, level, techstack, amount, userid, username } = await request.json();
 
     if (!userid) {
@@ -41,7 +38,6 @@ export async function POST(request: Request) {
 
     const ref = await db.collection("interviews").add(interview);
 
-    // It now returns a simple success response to our Agent.tsx
     return Response.json({ success: true, id: ref.id });
   } catch (error) {
     console.error("Error generating interview:", error);

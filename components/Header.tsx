@@ -1,21 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { useAuth } from "@/components/AuthProvider";
+import { signOut } from "firebase/auth";
+import { auth } from "@/firebase/client";
 
 const Header = () => {
-  const { user } = useUser();
+  const { user } = useAuth();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
 
   return (
     <header className="bg-dark-100 flex items-center justify-between p-4">
       <Link href="/">
         <h1 className="text-2xl font-bold text-white">AI Interview Platform</h1>
       </Link>
-      <div>
+      <div className="text-white flex items-center gap-4">
         {user ? (
-          <UserButton afterSignOutUrl="/" />
+          <>
+            <span>{user.displayName || user.email}</span>
+            <span>|</span>
+            <button onClick={handleSignOut}>Sign Out</button>
+          </>
         ) : (
-          <Link href="/sign-in" className="text-white">Sign In</Link>
+          null
         )}
       </div>
     </header>
@@ -23,38 +37,3 @@ const Header = () => {
 };
 
 export default Header;
-
-// import Link from "next/link";
-// import { UserButton } from "@clerk/nextjs";
-// import { auth } from "@clerk/nextjs/server";
-
-// import { useEffect, useState } from "react";
-
-// const Header = () => {
-//   const [userId, setUserId] = useState<string | null>(null);
-
-//   useEffect(() => {
-//     async function fetchAuth() {
-//       const session = await auth();
-//       setUserId(session?.userId ?? null);
-//     }
-//     fetchAuth();
-//   }, []);
-
-//   return (
-//     <header className="bg-dark-100 flex items-center justify-between p-4">
-//       <Link href="/">
-//         <h1 className="text-2xl font-bold text-white">AI Interview Platform</h1>
-//       </Link>
-//       <div>
-//         {userId ? (
-//           <UserButton afterSignOutUrl="/" />
-//         ) : (
-//           <Link href="/sign-in" className="text-white">Sign In</Link>
-//         )}
-//       </div>
-//     </header>
-//   );
-// };
-
-// export default Header;

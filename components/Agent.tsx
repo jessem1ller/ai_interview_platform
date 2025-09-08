@@ -85,7 +85,6 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     setCallStatus(CallStatus.CONNECTING);
 
     if (type === "generate") {
-      // ✅ Correctly calling the WORKFLOW ID with await
       await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
         variableValues: {
           username: firstName,
@@ -93,7 +92,6 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
         }
       });
     } else {
-      // ✅ Correctly calling the ASSISTANT ID with await
       const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
       await vapi.start(process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID!, {
         variableValues: {

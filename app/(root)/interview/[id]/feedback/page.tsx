@@ -59,7 +59,6 @@ const Feedback = async ({ params }: RouteParams) => {
 
       <p>{feedback?.finalAssessment}</p>
 
-      {/* Interview Breakdown */}
       <div className="flex flex-col gap-4">
         <h2>Breakdown of the Interview:</h2>
         {feedback?.categoryScores?.map((category, index) => (

@@ -2,15 +2,22 @@
 
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { signOut } from "firebase/auth";
+import { signOut as firebaseClientSignOut } from "firebase/auth";
 import { auth } from "@/firebase/client";
+import { useRouter } from "next/navigation";
 
 const Header = () => {
   const { user } = useAuth();
+  const router = useRouter();
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      await fetch('/api/auth/sign-out', { method: 'POST' });
+      
+      await firebaseClientSignOut(auth);
+      
+      router.refresh();
+      
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -29,7 +36,7 @@ const Header = () => {
             <button onClick={handleSignOut}>Sign Out</button>
           </>
         ) : (
-          null
+          <Link href="/sign-in">Sign In</Link>
         )}
       </div>
     </header>

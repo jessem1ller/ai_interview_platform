@@ -7,24 +7,79 @@ import { cn } from "@/lib/utils";
 import { vapi } from "@/lib/vapi.sdk";
 import { createFeedback } from "@/lib/actions/general.action";
 
+enum CallStatus {
+  INACTIVE = "INACTIVE",
+  CONNECTING = "CONNECTING",
+  ACTIVE = "ACTIVE",
+  FINISHED = "FINISHED",
+}
+
+interface SavedMessage {
+  role: "user" | "system" | "assistant";
+  content: string;
+}
+
 const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: AgentProps) => {
   const router = useRouter();
-  const [callStatus, setCallStatus] = useState("INACTIVE");
-  const [messages, setMessages] = useState<any[]>([]);
+  const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
+  const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [lastMessage, setLastMessage] = useState("");
+  const [lastMessage, setLastMessage] = useState<string>("");
+
   const firstName = userName?.split(' ')[0] || 'there';
 
-  // This handler only needs to listen for transcripts to display them.
   const handleMessage = useCallback(async (message: any) => {
     if (message.type === "transcript" && message.transcriptType === "final") {
-      setMessages((prev) => [...prev, { role: message.role, content: message.transcript }]);
+      const newMessage = {
+        role: message.role as 'user' | 'assistant',
+        content: message.transcript,
+      };
+      setMessages((prev) => [...prev, newMessage]);
     }
-  }, []);
 
-  const onCallStart = useCallback(() => setCallStatus("ACTIVE"), []);
+    // This block handles the tool call from Vapi on the client-side
+    if (
+      type === "generate" &&
+      message.type === "tool-calls" &&
+      message.toolCalls &&
+      message.toolCalls[0]?.function?.name === "createInterview"
+    ) {
+      // 1. Get the 5 parameters from Vapi
+      const interviewDetails = message.toolCalls[0].function.parameters;
+
+      try {
+        // 2. Add the known user data to create the full payload
+        const fullPayload = {
+          ...interviewDetails,
+          userid: userId,
+          username: firstName
+        };
+        
+        // 3. Send the complete package to your API
+        const response = await fetch("/api/vapi/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(fullPayload),
+        });
+        const result = await response.json();
+
+        if (result.success && result.id) {
+          router.push(`/interview/${result.id}`);
+        } else {
+          console.error("Failed to create interview:", result.error);
+          router.push('/');
+        }
+      } catch (error) {
+        console.error("Error calling API:", error);
+      } finally {
+        vapi.stop();
+      }
+    }
+  }, [type, userId, firstName, router]);
+  
+  const onCallStart = useCallback(() => setCallStatus(CallStatus.ACTIVE), []);
   const onCallEnd = useCallback(() => {
-    setCallStatus("FINISHED");
+    setCallStatus(CallStatus.FINISHED);
     if (type === "generate") {
       router.push('/');
       router.refresh();
@@ -33,7 +88,12 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
   
   const onSpeechStart = useCallback(() => setIsSpeaking(true), []);
   const onSpeechEnd = useCallback(() => setIsSpeaking(false), []);
-  const onError = useCallback((error: any) => console.log("Error:", error), []);
+  const onError = useCallback((error: any) => {
+    console.log("Error:", error);
+    if (error?.errorMsg === 'Meeting has ended') {
+      setCallStatus(CallStatus.FINISHED);
+    }
+  }, []);
 
   useEffect(() => {
     vapi.on("message", handleMessage);
@@ -56,7 +116,7 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     if (messages.length > 0) {
       setLastMessage(messages[messages.length - 1].content);
     }
-    const handleGenerateFeedback = async (transcript: any[]) => {
+    const handleGenerateFeedback = async (transcript: SavedMessage[]) => {
       if (!transcript || transcript.length === 0) return;
       const { success } = await createFeedback({ interviewId: interviewId!, userId: userId!, transcript, feedbackId });
       if (success) {
@@ -65,51 +125,32 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
         router.push("/");
       }
     };
-    if (callStatus === "FINISHED" && type !== "generate") {
+    if (callStatus === CallStatus.FINISHED && type !== "generate") {
       handleGenerateFeedback(messages);
     }
   }, [callStatus, messages, feedbackId, interviewId, router, type, userId]);
 
   const handleCall = async () => {
-    setCallStatus("CONNECTING");
+    setCallStatus(CallStatus.CONNECTING);
 
     if (type === "generate") {
-      const assistantId = process.env.NEXT_PUBLIC_VAPI_GENERATION_ASSISTANT_ID;
-      const variables = {
-        variableValues: {
-          username: firstName,
-          userid: userId
-        }
-      };
-
-      // ✅ ADD THIS LOG TO SEE THE DATA
-      console.log("SENDING TO VAPI:", {
-        assistantId: assistantId,
-        payload: variables
-      });
-
-      vapi.start(assistantId!, variables);
-
+      // This call is now simpler. It just starts the assistant.
+      // We are not passing any variables from the code.
+      vapi.start(process.env.NEXT_PUBLIC_VAPI_GENERATION_ASSISTANT_ID!);
     } else {
-      const assistantId = process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID;
       const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
-      const variables = {
+      vapi.start(process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID!, {
         variableValues: {
           questions: formattedQuestions,
           name: firstName
         }
-      };
-      
-      console.log("SENDING TO VAPI:", {
-        assistantId: assistantId,
-        payload: variables
       });
-      
-      vapi.start(assistantId!, variables);
     }
   };
 
-  const handleDisconnect = () => vapi.stop();
+  const handleDisconnect = () => {
+    vapi.stop();
+  };
 
   return (
     <>
@@ -119,7 +160,7 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
             <Image src="/ai-avatar.png" alt="profile-image" width={65} height={54} className="object-cover" />
             {isSpeaking && <span className="animate-speak" />}
           </div>
-          <h3>Johnny Five Interviewer</h3>
+          <h3>AI Interviewer</h3>
         </div>
         <div className="card-border">
           <div className="card-content">

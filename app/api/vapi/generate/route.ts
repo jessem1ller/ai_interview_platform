@@ -13,15 +13,12 @@ const interviewQuestionsSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  // Vapi sends the toolCallId in the headers for server-side tools
-  const toolCallId = request.headers.get('X-Vapi-Tool-Call-Id');
-
   try {
-    // The parameters are in the main body, not nested in "toolCall"
+    // The body is now a simple JSON object from our Agent.tsx
     const { type, role, level, techstack, amount, userid, username } = await request.json();
 
     if (!userid) {
-      throw new Error("User ID is missing from the Vapi request.");
+      throw new Error("User ID is missing.");
     }
 
     const { object } = await generateObject({
@@ -42,15 +39,12 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     };
 
-    await db.collection("interviews").add(interview);
+    const ref = await db.collection("interviews").add(interview);
 
-    return Response.json({
-      results: [{ toolCallId: toolCallId, result: "The interview was created successfully." }],
-    });
+    // It now returns a simple success response to our Agent.tsx
+    return Response.json({ success: true, id: ref.id });
   } catch (error) {
     console.error("Error generating interview:", error);
-    return Response.json({
-      results: [{ toolCallId: toolCallId, result: "There was an error creating the interview." }],
-    });
+    return Response.json({ success: false, error: "Failed to generate interview" }, { status: 500 });
   }
-};
+}

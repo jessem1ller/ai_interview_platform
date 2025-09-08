@@ -37,36 +37,24 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
       setMessages((prev) => [...prev, newMessage]);
     }
 
-    // This block handles the tool call from Vapi on the client-side
     if (
       type === "generate" &&
       message.type === "tool-calls" &&
       message.toolCalls &&
       message.toolCalls[0]?.function?.name === "createInterview"
     ) {
-      // 1. Get the 5 parameters from Vapi
       const interviewDetails = message.toolCalls[0].function.parameters;
-
       try {
-        // 2. Add the known user data to create the full payload
-        const fullPayload = {
-          ...interviewDetails,
-          userid: userId,
-          username: firstName
-        };
-        
-        // 3. Send the complete package to your API
+        const fullPayload = { ...interviewDetails, userid: userId, username: firstName };
         const response = await fetch("/api/vapi/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(fullPayload),
         });
         const result = await response.json();
-
         if (result.success && result.id) {
           router.push(`/interview/${result.id}`);
         } else {
-          console.error("Failed to create interview:", result.error);
           router.push('/');
         }
       } catch (error) {
@@ -76,16 +64,9 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
       }
     }
   }, [type, userId, firstName, router]);
-  
+
   const onCallStart = useCallback(() => setCallStatus(CallStatus.ACTIVE), []);
-  const onCallEnd = useCallback(() => {
-    setCallStatus(CallStatus.FINISHED);
-    if (type === "generate") {
-      router.push('/');
-      router.refresh();
-    }
-  }, [type, router]);
-  
+  const onCallEnd = useCallback(() => setCallStatus(CallStatus.FINISHED), []);
   const onSpeechStart = useCallback(() => setIsSpeaking(true), []);
   const onSpeechEnd = useCallback(() => setIsSpeaking(false), []);
   const onError = useCallback((error: any) => {
@@ -134,9 +115,7 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     setCallStatus(CallStatus.CONNECTING);
 
     if (type === "generate") {
-      // This call is now simpler. It just starts the assistant.
-      // We are not passing any variables from the code.
-      vapi.start(process.env.NEXT_PUBLIC_VAPI_GENERATION_ASSISTANT_ID!);
+      vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!);
     } else {
       const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
       vapi.start(process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID!, {

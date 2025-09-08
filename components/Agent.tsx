@@ -25,56 +25,26 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
-
   const firstName = userName?.split(' ')[0] || 'there';
 
   const handleMessage = useCallback(async (message: any) => {
     if (message.type === "transcript" && message.transcriptType === "final") {
-      const newMessage = {
-        role: message.role as 'user' | 'assistant',
-        content: message.transcript,
-      };
-      setMessages((prev) => [...prev, newMessage]);
-    }
-
-    if (
-      type === "generate" &&
-      message.type === "tool-calls" &&
-      message.toolCalls &&
-      message.toolCalls[0]?.function?.name === "createInterview"
-    ) {
-      const interviewDetails = message.toolCalls[0].function.parameters;
-      try {
-        const fullPayload = { ...interviewDetails, userid: userId, username: firstName };
-        const response = await fetch("/api/vapi/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(fullPayload),
-        });
-        const result = await response.json();
-        if (result.success && result.id) {
-          router.push(`/interview/${result.id}`);
-        } else {
-          router.push('/');
-        }
-      } catch (error) {
-        console.error("Error calling API:", error);
-      } finally {
-        vapi.stop();
-      }
-    }
-  }, [type, userId, firstName, router]);
-
-  const onCallStart = useCallback(() => setCallStatus(CallStatus.ACTIVE), []);
-  const onCallEnd = useCallback(() => setCallStatus(CallStatus.FINISHED), []);
-  const onSpeechStart = useCallback(() => setIsSpeaking(true), []);
-  const onSpeechEnd = useCallback(() => setIsSpeaking(false), []);
-  const onError = useCallback((error: any) => {
-    console.log("Error:", error);
-    if (error?.errorMsg === 'Meeting has ended') {
-      setCallStatus(CallStatus.FINISHED);
+      setMessages((prev) => [...prev, { role: message.role, content: message.transcript }]);
     }
   }, []);
+  
+  const onCallStart = useCallback(() => setCallStatus(CallStatus.ACTIVE), []);
+  const onCallEnd = useCallback(() => {
+    setCallStatus(CallStatus.FINISHED);
+    if (type === "generate") {
+      router.push('/');
+      router.refresh();
+    }
+  }, [type, router]);
+  
+  const onSpeechStart = useCallback(() => setIsSpeaking(true), []);
+  const onSpeechEnd = useCallback(() => setIsSpeaking(false), []);
+  const onError = useCallback((error: any) => console.log("Error:", error), []);
 
   useEffect(() => {
     vapi.on("message", handleMessage);
@@ -115,10 +85,17 @@ const Agent = ({ userName, userId, interviewId, feedbackId, type, questions }: A
     setCallStatus(CallStatus.CONNECTING);
 
     if (type === "generate") {
-      vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!);
+      // ✅ Correctly calling the WORKFLOW ID with await
+      await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
+        variableValues: {
+          username: firstName,
+          userid: userId
+        }
+      });
     } else {
+      // ✅ Correctly calling the ASSISTANT ID with await
       const formattedQuestions = questions?.map((q) => `- ${q}`).join("\n") ?? "";
-      vapi.start(process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID!, {
+      await vapi.start(process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID!, {
         variableValues: {
           questions: formattedQuestions,
           name: firstName

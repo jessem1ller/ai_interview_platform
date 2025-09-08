@@ -2,16 +2,35 @@
 
 import React, { useState, useEffect, useContext, createContext } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '@/firebase/client';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/firebase/client';
 
-const AuthContext = createContext<{ user: User | null }>({ user: null });
+interface AppUser extends User {
+  name?: string;
+}
+
+const AuthContext = createContext<{ user: AppUser | null }>({ user: null });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      if (authUser) {
+        const userDocRef = doc(db, 'users', authUser.uid);
+        const userDoc = await getDoc(userDocRef);
+
+        if (userDoc.exists()) {
+          setUser({
+            ...authUser,
+            name: userDoc.data().name,
+          });
+        } else {
+          setUser(authUser);
+        }
+      } else {
+        setUser(null);
+      }
     });
 
     return () => unsubscribe();

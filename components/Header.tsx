@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { signOut as firebaseClientSignOut } from "firebase/auth";
 import { auth } from "@/firebase/client";
+import { signOut as firebaseServerSignOut } from "@/lib/actions/auth.action";
 import { useRouter } from "next/navigation";
 
 const Header = () => {
@@ -12,16 +13,15 @@ const Header = () => {
 
   const handleSignOut = async () => {
     try {
-      await fetch('/api/auth/sign-out', { method: 'POST' });
-      
+      await firebaseServerSignOut();
       await firebaseClientSignOut(auth);
-      
       router.refresh();
-      
     } catch (error) {
       console.error("Error signing out:", error);
     }
   };
+  
+  const firstName = user?.name?.split(' ')[0];
 
   return (
     <header className="bg-dark-100 flex items-center justify-between p-4">
@@ -31,7 +31,7 @@ const Header = () => {
       <div className="text-white flex items-center gap-4">
         {user ? (
           <>
-            <span>{user.displayName || user.email}</span>
+            <span>Hi {firstName}!</span>
             <span>|</span>
             <button onClick={handleSignOut}>Sign Out</button>
           </>

@@ -17,16 +17,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (authUser) {
-        const userDocRef = doc(db, 'users', authUser.uid);
-        const userDoc = await getDoc(userDocRef);
+        try {
+          const userDocRef = doc(db, 'users', authUser.uid);
+          const userDoc = await getDoc(userDocRef);
 
-        if (userDoc.exists()) {
-          setUser({
-            ...authUser,
-            name: userDoc.data().name,
-          });
-        } else {
-          setUser(authUser);
+          if (userDoc.exists()) {
+            setUser({
+              ...authUser,
+              name: userDoc.data().name,
+            });
+          } else {
+            setUser(authUser);
+          }
+        } catch (error) {
+          console.error("Error fetching user document:", error);
+          setUser(authUser); // Fallback on error
         }
       } else {
         setUser(null);

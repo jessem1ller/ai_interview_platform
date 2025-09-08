@@ -21,7 +21,9 @@ const Header = () => {
     }
   };
   
-  const firstName = user?.name?.split(' ')[0];
+  // Safely get the name to display, with multiple fallbacks
+  const displayName = user?.name || user?.displayName || user?.email;
+  const greetingName = displayName?.split(' ')[0];
 
   return (
     <header className="bg-dark-100 flex items-center justify-between p-4">
@@ -31,7 +33,7 @@ const Header = () => {
       <div className="text-white flex items-center gap-4">
         {user ? (
           <>
-            <span>Hi {firstName}!</span>
+            <span>Hi {greetingName}!</span>
             <span>|</span>
             <button onClick={handleSignOut}>Sign Out</button>
           </>
